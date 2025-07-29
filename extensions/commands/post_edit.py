@@ -5,7 +5,7 @@ Post Edit Command - Edit existing clan recruitment posts
 import lightbulb
 import hikari
 import coc
-from datetime import datetime, timezone, UTC
+from datetime import datetime, timezone, UTC, timedelta
 import re
 from utils.mongo import MongoClient
 from utils.constants import CYAN_ACCENT
@@ -30,7 +30,17 @@ loader = lightbulb.Loader()
 modal_handlers = {}
 
 # Configuration - should match post_clan.py
-RECRUITMENT_CHANNEL_ID = None  # Set this to your recruitment channel ID
+RECRUITMENT_CHANNEL_ID = 1144471630614114454
+
+
+def ensure_utc_aware(dt):
+    """Ensure a datetime is timezone-aware in UTC"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # Naive datetime - assume it's UTC
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
 
 
 @loader.listener(hikari.InteractionCreateEvent)
@@ -62,7 +72,7 @@ class PostEdit(
         bot: hikari.GatewayBot = lightbulb.di.INJECTED,
         coc_client: coc.Client = lightbulb.di.INJECTED
     ) -> None:
-        # Defer the response immediately to avoid timeout
+        # Defer to prevent timeout during MongoDB query
         await ctx.defer(ephemeral=True)
         
         # Check if user has stored recruitment data
@@ -74,7 +84,7 @@ class PostEdit(
                 description="You don't have any saved recruitment data. Please use `/post-clan` with the save option to create one first.",
                 color=0xFF0000
             )
-            await ctx.respond(embed=embed)
+            await ctx.respond(embed=embed, flags=hikari.MessageFlag.EPHEMERAL)
             return
         
         # Store context and data for modal handler
@@ -100,9 +110,12 @@ class PostEdit(
             value=stored_data.get("clan_tag", "N/A"),
             inline=True
         )
+        # Format last updated date safely
+        posted_at = stored_data.get("posted_at", datetime.now(timezone.utc))
+        posted_at = ensure_utc_aware(posted_at)
         embed.add_field(
             name="Last Updated",
-            value=stored_data.get("posted_at", datetime.now(timezone.utc)).strftime('%B %d, %Y'),
+            value=posted_at.strftime('%B %d, %Y'),
             inline=True
         )
         
@@ -116,7 +129,8 @@ class PostEdit(
         
         await ctx.respond(
             embed=embed,
-            components=[row]
+            components=[row],
+            flags=hikari.MessageFlag.EPHEMERAL
         )
 
 

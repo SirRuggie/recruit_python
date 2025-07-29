@@ -30,7 +30,7 @@ from hikari.impl import (
 loader = lightbulb.Loader()
 
 # Configuration
-RECRUITMENT_CHANNEL_ID = None  # Set this to your recruitment channel ID if you want all auto-posts in one channel
+RECRUITMENT_CHANNEL_ID = 1144471630614114454
 
 # Logger for debugging
 logger = logging.getLogger(__name__)

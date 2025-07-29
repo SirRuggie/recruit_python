@@ -5,7 +5,7 @@ Post Clan Command - Create clan recruitment posts with modal input
 import lightbulb
 import hikari
 import coc
-from datetime import datetime, timezone, UTC
+from datetime import datetime, timezone, UTC, timedelta
 import re
 from utils.emoji import emojis
 from utils.mongo import MongoClient
@@ -30,8 +30,18 @@ loader = lightbulb.Loader()
 # Store modal handlers globally
 modal_handlers = {}
 
+
+def ensure_utc_aware(dt):
+    """Ensure a datetime is timezone-aware in UTC"""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # Naive datetime - assume it's UTC
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
 # Configuration
-RECRUITMENT_CHANNEL_ID = None  # Set this to your recruitment channel ID, e.g., 1234567890123456789
+RECRUITMENT_CHANNEL_ID = 1144471630614114454
 
 
 @loader.listener(hikari.InteractionCreateEvent)
@@ -66,7 +76,39 @@ async def on_interaction(event: hikari.InteractionCreateEvent) -> None:
             user_data = modal_handlers.get(user_id)
             
             if user_data:
-                # Show empty modal
+                # Check cooldown before showing modal
+                cooldown_hours = 12
+                cooldown_delta = timedelta(hours=cooldown_hours)
+                
+                if "stored_data" in user_data and user_data["stored_data"]:
+                    stored_data = user_data["stored_data"]
+                    if 'posted_at' in stored_data:
+                        last_posted = ensure_utc_aware(stored_data['posted_at'])
+                        time_since_last_post = datetime.now(timezone.utc) - last_posted
+                        
+                        if time_since_last_post < cooldown_delta:
+                            time_remaining = cooldown_delta - time_since_last_post
+                            next_post_time = datetime.now(timezone.utc) + time_remaining
+                            next_post_timestamp = int(next_post_time.timestamp())
+                            
+                            cooldown_embed = hikari.Embed(
+                                title="⏰ Cooldown Active",
+                                description=f"You can not post again until <t:{next_post_timestamp}:F>",
+                                color=0xFF0000
+                            )
+                            cooldown_embed.add_field(
+                                name="💡 Tip",
+                                value="Use `/post-edit` to modify your existing recruitment post.",
+                                inline=False
+                            )
+                            await interaction.create_initial_response(
+                                hikari.ResponseType.MESSAGE_CREATE,
+                                embed=cooldown_embed,
+                                flags=hikari.MessageFlag.EPHEMERAL
+                            )
+                            return
+                
+                # Show empty modal if no cooldown
                 await show_recruitment_modal_from_interaction(
                     interaction,
                     user_data["save"],
@@ -112,11 +154,24 @@ class PostClan(
                 value=stored_data.get("clan_tag", "N/A"),
                 inline=True
             )
-            embed.add_field(
-                name="Saved On",
-                value=stored_data.get("posted_at", datetime.now(timezone.utc)).strftime('%B %d, %Y'),
-                inline=True
-            )
+            # Calculate time since last post for display
+            if 'posted_at' in stored_data:
+                last_posted = ensure_utc_aware(stored_data['posted_at'])
+                time_since = datetime.now(timezone.utc) - last_posted
+                hours_since = int(time_since.total_seconds() // 3600)
+                minutes_since = int((time_since.total_seconds() % 3600) // 60)
+                
+                embed.add_field(
+                    name="Last Posted",
+                    value=f"{hours_since}h {minutes_since}m ago",
+                    inline=True
+                )
+            else:
+                embed.add_field(
+                    name="Saved On",
+                    value=stored_data.get("posted_at", datetime.now(timezone.utc)).strftime('%B %d, %Y'),
+                    inline=True
+                )
             
             # Create buttons for user choice
             row = ActionRow()
@@ -363,6 +418,26 @@ async def handle_modal_interaction(interaction: hikari.ModalInteraction) -> None
     mongo = user_data["mongo"]
     coc_client = user_data["coc_client"]
     bot = user_data["bot"]
+    
+    # Safety check: Verify cooldown again to prevent bypassing
+    cooldown_hours = 12
+    cooldown_delta = timedelta(hours=cooldown_hours)
+    
+    # Re-fetch current data to ensure we have the latest posted_at
+    current_data = await mongo.recruit_data.find_one({"_id": str(user_id)})
+    if current_data and 'posted_at' in current_data:
+        last_posted = ensure_utc_aware(current_data['posted_at'])
+        time_since_last_post = datetime.now(timezone.utc) - last_posted
+        
+        if time_since_last_post < cooldown_delta:
+            time_remaining = cooldown_delta - time_since_last_post
+            next_post_time = datetime.now(timezone.utc) + time_remaining
+            next_post_timestamp = int(next_post_time.timestamp())
+            
+            await interaction.edit_initial_response(
+                content=f"❌ **Cooldown Active**: You can not post again until <t:{next_post_timestamp}:F>\n💡 Use `/post-edit` to modify your existing post."
+            )
+            return
     
     # Get values from modal
     clan_tag = get_val("clan_tag").strip().upper()

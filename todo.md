@@ -91,7 +91,46 @@ The family links command provides a comprehensive self-service interface for mem
 #### Review Summary:
 The clan roles feature now provides a fast, intuitive experience that matches the townhall roles pattern exactly. Users can add clans without losing existing assignments, and all operations complete instantly.
 
-## Future Tasks =�
+### Post-Clan 12-Hour Cooldown Implementation
+**Date**: 2025-07-29
+**Developer**: Claude with Shaun
+
+#### Changes Made:
+1. **Added 12-hour cooldown system to `/post-clan` command**
+   - Imported `timedelta` from datetime module
+   - Checks `posted_at` timestamp from recruit_data collection
+   - Prevents posting if less than 12 hours since last post
+
+2. **Implemented cooldown check logic**
+   - Added check after retrieving stored_data (line 105)
+   - Calculates time remaining until next allowed post
+   - Shows hours and minutes in user-friendly format
+
+3. **Created informative cooldown error message**
+   - Red embed with "⏰ Cooldown Active" title
+   - Shows exact time remaining (X hours and Y minutes)
+   - Suggests using `/post-edit` to modify existing post
+
+4. **Enhanced stored data display**
+   - Updated embed to show "Last Posted: Xh Ym ago" instead of date
+   - Helps users understand their cooldown status at a glance
+
+5. **Verified data persistence**
+   - Confirmed `posted_at` is saved in all code paths:
+     - When save=True (line 431)
+     - When updating existing data (line 604)
+     - When creating minimal data (line 620)
+
+#### Technical Details:
+- **Cooldown Duration**: 12 hours (configurable via `cooldown_hours` variable)
+- **Time Calculations**: Uses UTC timezone for consistency
+- **Error Handling**: Gracefully handles missing `posted_at` field
+- **User Experience**: Clear messaging with actionable alternatives
+
+#### Review Summary:
+The 12-hour cooldown system prevents spam while allowing users to edit their existing posts at any time. The implementation provides clear feedback about when users can post again and guides them to use `/post-edit` for modifications.
+
+## Future Tasks
 
 ### High Priority
 - [ ] Test clan roles with large numbers of clans (25+)
