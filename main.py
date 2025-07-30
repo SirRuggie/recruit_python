@@ -56,6 +56,7 @@ async def on_starting(_: hikari.StartingEvent) -> None:
         "extensions.commands.post_clan",
         "extensions.commands.post_edit",
         "extensions.scheduler.auto_recruit",  # Keep scheduler, remove commands
+        "extensions.events.message_delete",  # Auto-delete messages in recruitment channel
     ] + load_cogs(disallowed={"example", "post_clan", "post_edit"})
 
     await client.load_extensions(*all_extensions)
