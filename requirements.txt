@@ -31,6 +31,9 @@ requests==2.34.2
 # Async version of requests (works with async code)
 aiohttp==3.14.5
 
+# Reads and uploads dashboard images in the WU R2 bucket (S3 API), same as the WU bot
+boto3==1.44.6
+
 # Uploads and manages media on Cloudinary
 cloudinary==1.47.0
 

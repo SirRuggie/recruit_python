@@ -9,6 +9,8 @@ const state = {
   templates: null,
   filter: "all",
   editing: null, // { post (or null for new), form }
+  images: null, // R2 library, loaded the first time the picker opens
+  picker: { tab: "library", query: "", file: null, preview: "", uploading: false, error: "" },
 };
 
 const TIMEZONES = [
@@ -34,6 +36,8 @@ const ICONS = {
   trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/>',
   alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
   logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" x2="9" y1="12" y2="12"/>',
+  image: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/>',
   refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
 };
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
@@ -458,8 +462,13 @@ function renderEditor() {
             ${fieldError("description")}
           </div>
           <div class="field">
-            <label for="f-img">Image URL <span class="hint">(optional)</span></label>
-            <input id="f-img" type="url" name="image_url" placeholder="https://" value="${esc(form.content.image_url)}" ${invalid("image_url")}>
+            <label for="f-img">Image <span class="hint">(optional)</span></label>
+            ${form.content.image_url.startsWith("https://") ? `<img class="image-current" src="${esc(form.content.image_url)}" alt="Current post image">` : ""}
+            <div class="row-actions">
+              <button type="button" class="btn" data-action="pick-image">${icon("image")} Choose image</button>
+              ${form.content.image_url ? `<button type="button" class="btn ghost" data-action="clear-image">${icon("x")} Remove</button>` : ""}
+            </div>
+            <input id="f-img" type="url" name="image_url" placeholder="Or paste an image URL (https://)" value="${esc(form.content.image_url)}" ${invalid("image_url")}>
             ${fieldError("image_url")}
           </div>
           <div class="field">
@@ -656,12 +665,141 @@ function toast(text, bad = false) {
   toastTimer = setTimeout(() => (el.className = ""), 3500);
 }
 
+// ---------- image picker ----------
+
+const norm = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+
+function libraryGroups() {
+  // Keep the newest file per folder and name (WU keeps old copies as name.<hash>.ext).
+  const seen = new Set();
+  const groups = new Map();
+  const query = norm(state.picker.query);
+  for (const img of state.images || []) {
+    const base = img.name.replace(/\.[0-9a-f]{10}\.[a-z]+$/i, "");
+    const id = `${img.folder}/${base}`;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    const label = img.folder.startsWith("jo-nation") ? "Jo Nation uploads" : img.folder.replace(/^clans\//, "");
+    if (query && !norm(label).includes(query) && !norm(base).includes(query)) continue;
+    if (!groups.has(label)) groups.set(label, []);
+    groups.get(label).push({ ...img, base });
+  }
+  const clan = norm(state.editing?.clanName || (state.editing?.post && clanName(state.editing.post)));
+  const rank = (label) => (clan && norm(label) === clan ? 0 : label === "Jo Nation uploads" ? 1 : 2);
+  return [...groups.entries()].sort((a, b) => rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]));
+}
+
+function renderPicker() {
+  const pk = state.picker;
+  let body;
+  if (pk.tab === "library") {
+    if (state.images === null) body = `<p class="hint">Loading images…</p>`;
+    else if (pk.error) body = `<p class="form-error">${esc(pk.error)}</p>`;
+    else {
+      const groups = libraryGroups();
+      body = groups.length
+        ? groups
+            .map(
+              ([label, imgs]) => `<section class="lib-group"><h3>${esc(label)}</h3><div class="lib-grid">
+                ${imgs.map((i) => `<button type="button" class="lib-item" data-pick="${esc(i.url)}" title="${esc(i.base)}"><img src="${esc(i.url)}" alt="" loading="lazy" decoding="async"><span>${esc(i.base)}</span></button>`).join("")}
+              </div></section>`,
+            )
+            .join("")
+        : `<p class="hint">No images match.</p>`;
+    }
+    body = `<input type="search" class="lib-search" placeholder="Search clans" value="${esc(pk.query)}" aria-label="Search images">${body}`;
+  } else {
+    body = `
+      <label class="drop" id="drop">
+        <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" id="upload-file" class="sr-only">
+        ${pk.preview ? `<img src="${esc(pk.preview)}" alt="Selected image">` : `${icon("upload")}<span>Tap to pick an image, or drop it here</span><small class="hint">PNG, JPG, GIF or WEBP, up to 10 MB</small>`}
+      </label>
+      ${pk.file ? `<p class="hint">${esc(pk.file.name)} · ${(pk.file.size / 1048576).toFixed(1)} MB. Saved to R2 under jo-nation/recruit.</p>` : ""}
+      ${pk.error ? `<p class="form-error" role="alert">${esc(pk.error)}</p>` : ""}
+      <button type="button" class="btn primary" data-action="upload" ${pk.file && !pk.uploading ? "" : "disabled"}>${icon("upload")} ${pk.uploading ? "Uploading…" : "Upload and use"}</button>`;
+  }
+  $("#picker").innerHTML = `
+    <div class="picker">
+      <div class="editor-head">
+        <h2 id="picker-title">Choose image</h2>
+        <button type="button" class="btn ghost icon-only" data-action="close-picker" aria-label="Close">${icon("x")}</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" role="tab" data-tab="library" aria-selected="${pk.tab === "library"}">Library</button>
+        <button type="button" role="tab" data-tab="upload" aria-selected="${pk.tab === "upload"}">Upload</button>
+      </div>
+      <div class="picker-body">${body}</div>
+    </div>`;
+}
+
+async function openPicker() {
+  readForm();
+  state.picker = { tab: "library", query: "", file: null, preview: "", uploading: false, error: "" };
+  renderPicker();
+  $("#picker").showModal();
+  if (state.images === null) {
+    try {
+      state.images = (await api("GET", "/api/images")).images;
+    } catch (err) {
+      state.images = [];
+      state.picker.error = err.message;
+    }
+    if ($("#picker").open) renderPicker();
+  }
+}
+
+function useImage(url) {
+  state.editing.form.content.image_url = url;
+  $("#picker").close();
+  clearError({ name: "image_url" });
+  renderEditor();
+  $('#editor [data-action="pick-image"]')?.focus();
+}
+
+function chooseFile(file) {
+  const pk = state.picker;
+  if (pk.preview) URL.revokeObjectURL(pk.preview);
+  pk.error = "";
+  pk.file = file || null;
+  pk.preview = file ? URL.createObjectURL(file) : "";
+  if (file && file.size > 10 * 1048576) pk.error = "Images must be under 10 MB.";
+  renderPicker();
+}
+
+async function uploadImage() {
+  const pk = state.picker;
+  if (!pk.file || pk.error) return;
+  pk.uploading = true;
+  renderPicker();
+  const body = new FormData();
+  body.append("file", pk.file);
+  body.append("name", state.editing.clanName || (state.editing.post && clanName(state.editing.post)) || "recruit");
+  try {
+    const response = await fetch("/api/images", { method: "POST", body, headers: { "X-CSRF-Token": state.csrf }, credentials: "same-origin" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.error || "Upload failed.");
+    state.images = null; // reload the library next time so the upload shows
+    useImage(data.url);
+    toast("Uploaded to R2.");
+  } catch (err) {
+    pk.uploading = false;
+    pk.error = err.message;
+    renderPicker();
+  }
+}
+
 // ---------- events ----------
 
 document.addEventListener("click", (event) => {
   const target = event.target.closest("button, a");
   if (!target) return;
   const inEditor = target.closest("#editor");
+  if (target.dataset.pick) return useImage(target.dataset.pick);
+  if (target.dataset.tab) {
+    state.picker.tab = target.dataset.tab;
+    state.picker.error = state.images !== null && !state.images.length && target.dataset.tab === "library" ? state.picker.error : "";
+    return renderPicker();
+  }
   if (target.dataset.edit) return openEditor(state.posts.find((p) => p.id === target.dataset.edit));
   if (target.dataset.toggle) return toggle(target.dataset.toggle, target);
   if (target.dataset.filter) {
@@ -705,6 +843,16 @@ document.addEventListener("click", (event) => {
       return renderEditor();
     case "delete":
       return remove();
+    case "pick-image":
+      return openPicker();
+    case "clear-image":
+      readForm();
+      state.editing.form.content.image_url = "";
+      return renderEditor();
+    case "close-picker":
+      return $("#picker").close();
+    case "upload":
+      return uploadImage();
   }
   if (inEditor && target.type === "submit") return; // handled by submit
 });
@@ -727,6 +875,15 @@ function clearError(field) {
 }
 
 document.addEventListener("input", (event) => {
+  if (event.target.classList.contains("lib-search")) {
+    state.picker.query = event.target.value;
+    const pos = event.target.selectionStart;
+    renderPicker();
+    const box = $("#picker .lib-search");
+    box.focus();
+    box.setSelectionRange(pos, pos);
+    return;
+  }
   if (!state.editing || !event.target.closest("#editor")) return;
   const name = event.target.name;
   clearError(event.target);
@@ -739,6 +896,7 @@ document.addEventListener("input", (event) => {
 });
 
 document.addEventListener("change", (event) => {
+  if (event.target.id === "upload-file") return chooseFile(event.target.files[0]);
   if (!state.editing || event.target.name !== "discord_user") return;
   readForm();
   pickTemplate(event.target.value);
@@ -747,6 +905,16 @@ document.addEventListener("change", (event) => {
   renderEditor();
   if (event.target.value === "__other") $('#editor input[name="discord_id"]')?.focus();
   else $("#f-user")?.focus();
+});
+
+// Drag and drop onto the upload area.
+document.addEventListener("dragover", (event) => {
+  if (event.target.closest?.("#drop")) event.preventDefault();
+});
+document.addEventListener("drop", (event) => {
+  if (!event.target.closest?.("#drop")) return;
+  event.preventDefault();
+  chooseFile(event.dataTransfer.files[0]);
 });
 
 $("#editor")?.addEventListener("close", () => {

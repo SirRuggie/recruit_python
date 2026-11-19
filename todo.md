@@ -1,8 +1,34 @@
 # Recruit-Python Bot - Todo List
 
-## Current Plan: Scheduled posts dashboard
+## Current Plan: Pick or upload the post image in the dashboard
 **Date**: 2026-11-19
-**Status**: Code done and tested with sample data 2026-11-19. Step 8 (go live) needs Ruggie.
+**Status**: Code done and tested 2026-11-19. Deploy (step 7) needs Ruggie.
+
+Goal: in the post editor, choose the image from the WU images already in R2, or upload a new one that goes to R2 under `jo-nation/`, instead of hunting for a URL.
+
+How WU stores images (read from the WU repo): bucket behind `https://wu-media.ruggie.zone`, clan logos and banners under `clans/<Clan Name>/`, keys like `logo.<sha10>.png`, uploaded with boto3 using `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL`.
+
+- [x] 1. Add `boto3` to `requirements.txt` (same as WU). Pillow is already there.
+- [x] 2. `dashboard/media.py`: list images under `clans/` and `jo-nation/` (cached 5 minutes), and upload: check the file is a real PNG/JPEG/GIF/WEBP under 10 MB, store it as `jo-nation/recruit/<clan-name>.<hash>.<ext>` with a long cache header (same rules as WU's media_store), return the public URL.
+- [x] 3. Routes: `GET /api/images`, `POST /api/images` (logged in + CSRF, like the rest).
+- [x] 4. Editor: "Choose image" next to the Image URL field opens a picker with two tabs. **Library**: thumbnails grouped by clan folder, search box, the folder matching the post's clan shown first. **Upload**: pick or drop a file; it uploads and fills the field. Pasting a URL still works. Clear button to remove the image.
+- [x] 5. Same `.env` key names as WU. If R2 keys are missing, the picker says so and the rest of the dashboard still works.
+- [x] 6. Test with a fake R2 (moto or a stub): list, upload valid image, reject non-image and oversized file, logged-out 401. Screenshots at 360x800 and 1440x1000.
+- [ ] 7. Deploy: pull, `pip install -r requirements.txt` in the venv, add the R2 keys to `.env`, restart `jo-nation-dash.service`.
+
+Ruggie chose a new R2 API token for Jo Nation (Object Read & Write on the WU bucket), created 2026-11-19.
+
+### Review
+- `dashboard/media.py`: lists `clans/` and `jo-nation/` image keys (5-minute cache, cleared after an upload) and uploads after checking the bytes with Pillow (PNG/JPEG/GIF/WEBP, 10 MB, 40 MP). Key `jo-nation/recruit/<clan-name>.<sha10>.<ext>`, immutable cache header, same R2 client settings as WU.
+- `server.py`: `GET/POST /api/images` (login + CSRF), request size raised to 11 MB, CSP allows `blob:` images for the upload preview.
+- Editor: current image shown, "Choose image" and "Remove" buttons, paste field kept. Picker: Library tab groups the newest logo/banner per WU clan folder (older copies hidden), the post's clan first, then Jo Nation uploads, with search. Upload tab: pick or drop, preview, "Upload and use".
+- `requirements.txt`: `boto3==1.44.6`.
+- Tested with a fake bucket: 9 image API checks (logged out 401 on list and upload, missing CSRF 403, a JPEG named .png stored as .jpg, uploaded file served, new upload in library at once, HTML file rejected, over 10 MB rejected, no file 400), missing R2 keys returns a clear 503 message, the 17 earlier API checks still pass. Playwright at 1440x1000 and 360x800: open picker, groups in the right order, search, pick fills the field, upload fills the field; no page errors.
+- Not tested: the real R2 bucket. Checked after deploy.
+
+## Done: Scheduled posts dashboard
+**Date**: 2026-11-19
+**Status**: Live at https://jonation.ruggie.zone since 2026-11-19 (Cloudflare Tunnel route to localhost:8790, no Caddy).
 
 Goal: a small web dashboard where Ruggie can see every scheduled recruitment post the bot sends (MongoDB `settings.auto_recruit`), edit the time, timezone and on/off state, edit what gets posted, and add new ones. Not a long scrolling list. Look and feel taken from dash.warriorsunited.cc (WU's dark theme, gold accent, Inter, 44px controls, mobile-first).
 
@@ -32,7 +58,7 @@ Goal: a small web dashboard where Ruggie can see every scheduled recruitment pos
 - [x] 5. Bot (`extensions/scheduler/auto_recruit.py`): support a `post_times` list next to the old `post_time` field (one job, fires at each time; old docs keep working), and reload every 1 minute instead of 5.
 - [x] 6. Test locally with a throwaway MongoDB and fixture data: list, add, edit, pause, delete, bad inputs, logged-out access. Screenshots at 360x800 and 1440x1000.
 - [x] 7. Deploy files: `deploy/jo-nation-dash.service` (as `jonation`, `127.0.0.1:8790`), Caddy site block, `docs/deployment.md` section.
-- [ ] 8. Go live (Ruggie runs the sudo steps one at a time): `.env` keys, unit, Caddy block, DNS record for `jonation.ruggie.zone`, OAuth redirect URL in the Discord Developer Portal.
+- [x] 8. Go live (Ruggie runs the sudo steps one at a time): `.env` keys, unit, Caddy block, DNS record for `jonation.ruggie.zone`, OAuth redirect URL in the Discord Developer Portal.
 
 ### Review (code)
 - **Dashboard** (`dashboard/`): `server.py` is the aiohttp app (login, posts API, input checks, Clash and Discord name lookups with a cache). `static/` holds one HTML page, one CSS file (WU tokens, Inter font copied from WU) and one JS file. No build step, no new Python packages.

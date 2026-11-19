@@ -26,6 +26,8 @@ import aiohttp
 from aiohttp import web
 from bson import ObjectId
 
+from dashboard.media import MediaError, MediaStore
+
 log = logging.getLogger("dashboard")
 
 STATIC_DIR = Path(__file__).parent / "static"
@@ -504,6 +506,36 @@ async def _json(request) -> dict:
     return body
 
 
+# ---------- image routes ----------
+
+async def list_images(request):
+    require_user(request)
+    try:
+        images = await request.app["media"].list_images()
+    except MediaError as exc:
+        return web.json_response({"error": str(exc), "images": []}, status=503)
+    return web.json_response({"images": images})
+
+
+async def upload_image(request):
+    require_user(request)
+    try:
+        form = await request.post()
+    except ValueError:
+        raise web.HTTPRequestEntityTooLarge(max_size=11 * 1024 * 1024, actual_size=request.content_length or 0,
+                                            text=json.dumps({"error": "Images must be under 10 MB."}),
+                                            content_type="application/json")
+    upload = form.get("file")
+    if not hasattr(upload, "file"):
+        raise web.HTTPBadRequest(text=json.dumps({"error": "Pick an image file."}), content_type="application/json")
+    data = upload.file.read(11 * 1024 * 1024)
+    try:
+        url = await request.app["media"].upload(data, str(form.get("name") or ""))
+    except MediaError as exc:
+        raise web.HTTPBadRequest(text=json.dumps({"error": str(exc)}), content_type="application/json")
+    return web.json_response({"url": url}, status=201)
+
+
 # ---------- app ----------
 
 @web.middleware
@@ -514,7 +546,7 @@ async def security_headers(request, handler):
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault(
         "Content-Security-Policy",
-        "default-src 'self'; img-src 'self' https: data:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'; "
+        "default-src 'self'; img-src 'self' https: data: blob:; style-src 'self'; style-src-attr 'unsafe-inline'; script-src 'self'; "
         "connect-src 'self'; frame-ancestors 'none'",
     )
     if request.path.startswith("/api/"):
@@ -529,7 +561,7 @@ async def index(request):
     return web.FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
-def create_app(mongo, cfg: dict | None = None) -> web.Application:
+def create_app(mongo, cfg: dict | None = None, media: MediaStore | None = None) -> web.Application:
     cfg = cfg or load_config()
     if not cfg["secret"] or len(cfg["secret"]) < 32:
         raise SystemExit("DASHBOARD_SECRET must be set to a random string of 32+ characters.")
@@ -538,10 +570,11 @@ def create_app(mongo, cfg: dict | None = None) -> web.Application:
     if not cfg["dev_login"] and not (cfg["client_id"] and cfg["client_secret"]):
         raise SystemExit("DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET are required for Discord login.")
 
-    app = web.Application(middlewares=[security_headers], client_max_size=64 * 1024)
+    app = web.Application(middlewares=[security_headers], client_max_size=11 * 1024 * 1024)
     app["cfg"] = cfg
     app["mongo"] = mongo
     app["cache"] = {}
+    app["media"] = media or MediaStore()
 
     async def http_session(app):
         app["http"] = aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=8))
@@ -561,5 +594,7 @@ def create_app(mongo, cfg: dict | None = None) -> web.Application:
     app.router.add_delete("/api/posts/{id}", delete_post)
     app.router.add_get("/api/templates", list_templates)
     app.router.add_get("/api/clans/{tag}", clan_lookup)
+    app.router.add_get("/api/images", list_images)
+    app.router.add_post("/api/images", upload_image)
     app.router.add_static("/static/", STATIC_DIR)
     return app
