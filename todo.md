@@ -1,5 +1,36 @@
 # Recruit-Python Bot - Todo List
 
+## Current Plan: Host Jo Nation bot on agent-forge and fix bugs
+**Date**: 2026-11-19
+**Status**: Waiting for Ruggie's OK
+
+Goal: run this bot on agent-forge the same way WU Wizard runs (own OS user, own venv, own .env, own systemd unit), and fix the bugs that stop it from working fully.
+
+### Part A: Code changes (one PR on this repo)
+- [ ] A1. `/post-edit` no longer resets the 12-hour cooldown. Edits stop overwriting `posted_at`; they set a separate `edited_at` field instead. (`extensions/commands/post_edit.py`)
+- [ ] A2. Read the recruitment channel ID from `.env` (`RECRUITMENT_CHANNEL_ID`), with the current ID `1144471630614114454` as the default. Put it in one place (`utils/constants.py`) instead of 4 files.
+- [ ] A3. Pin dependency versions in `requirements.txt` to the versions tested on 2026-11-19 (hikari 2.6.0, hikari-lightbulb 3.2.7, coc.py 4.0.0, APScheduler 3.11.3, pymongo 4.20.0, pendulum 3.3.0, and the rest).
+- [ ] A4. "Use Stored Data" checks the cooldown before opening the form, the same way "Create New Post" already does. (`extensions/commands/post_clan.py`)
+- [ ] A5. Buttons clicked after a bot restart reply "Session expired, run the command again" instead of "This interaction failed". (`post_clan.py`)
+- [ ] A6. Add `deploy/jo-nation.service` (systemd unit, copied from the WU Wizard pattern) and a `docs/deployment.md` with the setup and update commands below.
+- [ ] A7. Update README: `.env` keys, Python 3.12, how it runs on agent-forge.
+
+### Part B: Host setup on agent-forge (needs Ruggie's computer and sudo)
+- [ ] B1. Create OS user `jonation` (own home, mode 750, no sudo). Check first that it doesn't already exist.
+- [ ] B2. As `jonation`: install uv and Python 3.12.3, clone `SirRuggie/recruit_python` to `/home/jonation/recruit_python`, create `venv/`, `pip install -r requirements.txt`.
+- [ ] B3. Ruggie puts the `.env` in place by file (mode 600, owner jonation): `DISCORD_TOKEN` (the Jo Nation Helper bot's own token, never WU Wizard's), `MONGODB_URI`, optional `RECRUITMENT_CHANNEL_ID`, `CLOUDINARY_*` optional.
+- [ ] B4. Install `/etc/systemd/system/jo-nation.service` from `deploy/`, `daemon-reload`, `enable --now`.
+- [ ] B5. Add `/etc/sudoers.d/jo-nation` so ruggie can run commands as jonation and start/stop/restart/status jo-nation.service only.
+- [ ] B6. Check `journalctl -u jo-nation.service`, then test `/post-clan` and `/post-edit` in Discord.
+- [ ] B7. Stop `recruit-bot.service` on the old Hetzner box once the new one works, so two copies don't answer every command twice.
+
+### Things Ruggie must do or confirm
+- Discord Developer Portal, Jo Nation Helper app: copy the token and turn on the **Server Members** and **Message Content** intents.
+- Confirm the recruitment channel ID above is still right.
+- Decide whether Jo Nation uses the same Atlas cluster as WU Wizard (shares the Free tier limits) or its own.
+- Approve sudo steps B1, B4, B5 when they come up.
+
+
 ## Completed Tasks
 
 ### Family Links Command Implementation
