@@ -30,7 +30,7 @@ from hikari.impl import (
 loader = lightbulb.Loader()
 
 # Configuration (set in .env, see utils/constants.py)
-from utils.constants import RECRUITMENT_CHANNEL_ID
+from utils.constants import RECRUITMENT_CHANNEL_ID, RECRUITMENT_INFO_IMAGE_URL
 
 # Logger for debugging
 logger = logging.getLogger(__name__)
@@ -351,7 +351,7 @@ async def post_recruitment(
                         "Remember, you can post once every 12 hours."
                     )),
                     Separator(divider=True),
-                    Media(items=[MediaItem(media="https://res.cloudinary.com/dxmtzuomk/image/upload/v1753197822/misc_images/image.jpg")])
+                    Media(items=[MediaItem(media=RECRUITMENT_INFO_IMAGE_URL)])
                 ]
             )
             

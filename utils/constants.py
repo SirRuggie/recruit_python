@@ -7,6 +7,9 @@ load_dotenv()
 # Channel where recruitment posts go. Set RECRUITMENT_CHANNEL_ID in .env to change it.
 RECRUITMENT_CHANNEL_ID = int(os.getenv("RECRUITMENT_CHANNEL_ID") or 1144471630614114454)
 
+# Picture in the "Recruitment Post Process" message. Hosted in the WU R2 bucket under jo-nation/.
+RECRUITMENT_INFO_IMAGE_URL = "https://wu-media.ruggie.zone/jo-nation/recruit_info.jpg"
+
 RED_ACCENT = hikari.Color.from_hex_code("#AA0000")
 GOLD_ACCENT = hikari.Color.from_hex_code("FFD700")
 BLUE_ACCENT = hikari.Color.from_hex_code("0066FF")
