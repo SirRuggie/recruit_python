@@ -19,9 +19,7 @@ bot = hikari.GatewayBot(
     token=os.getenv("DISCORD_TOKEN"),
     intents=(
         hikari.Intents.GUILD_MESSAGES
-        | hikari.Intents.MESSAGE_CONTENT
         | hikari.Intents.GUILDS
-        | hikari.Intents.GUILD_MEMBERS
         | hikari.Intents.GUILD_MODERATION
         | hikari.Intents.GUILD_MESSAGE_REACTIONS
     ),
