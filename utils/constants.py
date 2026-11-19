@@ -1,4 +1,11 @@
+import os
 import hikari
+from dotenv import load_dotenv
+
+load_dotenv()
+
+# Channel where recruitment posts go. Set RECRUITMENT_CHANNEL_ID in .env to change it.
+RECRUITMENT_CHANNEL_ID = int(os.getenv("RECRUITMENT_CHANNEL_ID") or 1144471630614114454)
 
 RED_ACCENT = hikari.Color.from_hex_code("#AA0000")
 GOLD_ACCENT = hikari.Color.from_hex_code("FFD700")

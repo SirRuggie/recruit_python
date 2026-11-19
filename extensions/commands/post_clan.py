@@ -40,8 +40,8 @@ def ensure_utc_aware(dt):
         return dt.replace(tzinfo=timezone.utc)
     return dt
 
-# Configuration
-RECRUITMENT_CHANNEL_ID = 1144471630614114454
+# Configuration (set in .env, see utils/constants.py)
+from utils.constants import RECRUITMENT_CHANNEL_ID
 
 
 @loader.listener(hikari.InteractionCreateEvent)
@@ -56,66 +56,75 @@ async def on_interaction(event: hikari.InteractionCreateEvent) -> None:
     
     # Handle button interactions
     elif isinstance(interaction, hikari.ComponentInteraction):
+        if not interaction.custom_id.startswith(("use_stored_", "new_post_")):
+            return
+
+        user_id = int(interaction.custom_id.split("_")[-1])
+        user_data = modal_handlers.get(user_id)
+
+        # Button state is kept in memory, so it is gone after a bot restart
+        if not user_data:
+            await interaction.create_initial_response(
+                hikari.ResponseType.MESSAGE_CREATE,
+                content="❌ Session expired. Please run `/post-clan` again.",
+                flags=hikari.MessageFlag.EPHEMERAL
+            )
+            return
+
+        # Check cooldown before showing the form (both buttons)
+        if await send_cooldown_if_active(interaction, user_data.get("stored_data")):
+            return
+
         if interaction.custom_id.startswith("use_stored_"):
-            user_id = int(interaction.custom_id.split("_")[-1])
-            user_data = modal_handlers.get(user_id)
-            
-            if user_data and "stored_data" in user_data:
-                # Show modal with prefilled data
-                await show_recruitment_modal_from_interaction(
-                    interaction,
-                    user_data["save"],
-                    user_data["mongo"],
-                    user_data["coc_client"],
-                    user_data["bot"],
-                    user_data["stored_data"]
-                )
-        
-        elif interaction.custom_id.startswith("new_post_"):
-            user_id = int(interaction.custom_id.split("_")[-1])
-            user_data = modal_handlers.get(user_id)
-            
-            if user_data:
-                # Check cooldown before showing modal
-                cooldown_hours = 12
-                cooldown_delta = timedelta(hours=cooldown_hours)
-                
-                if "stored_data" in user_data and user_data["stored_data"]:
-                    stored_data = user_data["stored_data"]
-                    if 'posted_at' in stored_data:
-                        last_posted = ensure_utc_aware(stored_data['posted_at'])
-                        time_since_last_post = datetime.now(timezone.utc) - last_posted
-                        
-                        if time_since_last_post < cooldown_delta:
-                            time_remaining = cooldown_delta - time_since_last_post
-                            next_post_time = datetime.now(timezone.utc) + time_remaining
-                            next_post_timestamp = int(next_post_time.timestamp())
-                            
-                            cooldown_embed = hikari.Embed(
-                                title="⏰ Cooldown Active",
-                                description=f"You can not post again until <t:{next_post_timestamp}:F>",
-                                color=0xFF0000
-                            )
-                            cooldown_embed.add_field(
-                                name="💡 Tip",
-                                value="Use `/post-edit` to modify your existing recruitment post.",
-                                inline=False
-                            )
-                            await interaction.create_initial_response(
-                                hikari.ResponseType.MESSAGE_CREATE,
-                                embed=cooldown_embed,
-                                flags=hikari.MessageFlag.EPHEMERAL
-                            )
-                            return
-                
-                # Show empty modal if no cooldown
-                await show_recruitment_modal_from_interaction(
-                    interaction,
-                    user_data["save"],
-                    user_data["mongo"],
-                    user_data["coc_client"],
-                    user_data["bot"]
-                )
+            # Show modal with prefilled data
+            await show_recruitment_modal_from_interaction(
+                interaction,
+                user_data["save"],
+                user_data["mongo"],
+                user_data["coc_client"],
+                user_data["bot"],
+                user_data.get("stored_data")
+            )
+        else:
+            # Show empty modal
+            await show_recruitment_modal_from_interaction(
+                interaction,
+                user_data["save"],
+                user_data["mongo"],
+                user_data["coc_client"],
+                user_data["bot"]
+            )
+
+
+async def send_cooldown_if_active(interaction: hikari.ComponentInteraction, stored_data: dict) -> bool:
+    """Reply with a cooldown message if the user posted less than 12 hours ago. Returns True if blocked."""
+    cooldown_delta = timedelta(hours=12)
+
+    if not stored_data or 'posted_at' not in stored_data:
+        return False
+
+    last_posted = ensure_utc_aware(stored_data['posted_at'])
+    time_since_last_post = datetime.now(timezone.utc) - last_posted
+    if time_since_last_post >= cooldown_delta:
+        return False
+
+    next_post_timestamp = int((last_posted + cooldown_delta).timestamp())
+    cooldown_embed = hikari.Embed(
+        title="⏰ Cooldown Active",
+        description=f"You can not post again until <t:{next_post_timestamp}:F>",
+        color=0xFF0000
+    )
+    cooldown_embed.add_field(
+        name="💡 Tip",
+        value="Use `/post-edit` to modify your existing recruitment post.",
+        inline=False
+    )
+    await interaction.create_initial_response(
+        hikari.ResponseType.MESSAGE_CREATE,
+        embed=cooldown_embed,
+        flags=hikari.MessageFlag.EPHEMERAL
+    )
+    return True
 
 
 @loader.command

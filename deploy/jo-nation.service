@@ -1,0 +1,26 @@
+# Jo Nation bot - systemd unit for agent-forge.
+# Copy of the WU bot's wu-bot.service pattern. Install with:
+#   sudo install -m 644 deploy/jo-nation.service /etc/systemd/system/jo-nation.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jo-nation.service
+# After any change to this file, run: sudo systemctl daemon-reload
+
+[Unit]
+Description=Jo Nation Discord bot (recruit_python)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jonation
+Group=jonation
+WorkingDirectory=/home/jonation/recruit_python
+Environment=PATH=/home/jonation/recruit_python/venv/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+# .env is read by the code (python-dotenv), so there is no EnvironmentFile= here.
+ExecStart=/home/jonation/recruit_python/venv/bin/python main.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

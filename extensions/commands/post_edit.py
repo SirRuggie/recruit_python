@@ -29,8 +29,8 @@ loader = lightbulb.Loader()
 # Store modal handlers globally
 modal_handlers = {}
 
-# Configuration - should match post_clan.py
-RECRUITMENT_CHANNEL_ID = 1144471630614114454
+# Configuration (set in .env, see utils/constants.py)
+from utils.constants import RECRUITMENT_CHANNEL_ID
 
 
 def ensure_utc_aware(dt):
@@ -319,12 +319,15 @@ async def handle_edit_modal_interaction(interaction: hikari.ModalInteraction) ->
             "clan_tag": clan_tag,
             "description": recruitment_message,
             "posted_by": interaction.user.id,
-            "posted_at": datetime.now(timezone.utc),
+            "edited_at": datetime.now(timezone.utc),
             "guild_id": interaction.guild_id,
             "message_id": stored_data.get("message_id"),  # Preserve message ID
             "channel_id": stored_data.get("channel_id")   # Preserve channel ID
         }
         
+        # Keep the original post time so editing does not restart the 12-hour cooldown
+        if stored_data.get("posted_at"):
+            save_data["posted_at"] = stored_data["posted_at"]
         if image_url:
             save_data["image_url"] = image_url
         if discord_link:
