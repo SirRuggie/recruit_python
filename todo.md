@@ -2,7 +2,7 @@
 
 ## Current Plan: Host Jo Nation bot on agent-forge and fix bugs
 **Date**: 2026-11-19
-**Status**: Part A done (PR open). Part B waiting on Ruggie's computer.
+**Status**: Done 2026-11-19. Bot is live on agent-forge.
 
 Goal: run this bot on agent-forge the same way WU Wizard runs (own OS user, own venv, own .env, own systemd unit), and fix the bugs that stop it from working fully.
 
@@ -17,13 +17,18 @@ Goal: run this bot on agent-forge the same way WU Wizard runs (own OS user, own 
 - [x] A7. Update README: `.env` keys, Python 3.12, how it runs on agent-forge.
 
 ### Part B: Host setup on agent-forge (needs Ruggie's computer and sudo)
-- [ ] B1. Create OS user `jonation` (own home, mode 750, no sudo). Check first that it doesn't already exist.
-- [ ] B2. As `jonation`: install uv and Python 3.12.3, clone `SirRuggie/recruit_python` to `/home/jonation/recruit_python`, create `venv/`, `pip install -r requirements.txt`.
-- [ ] B3. Ruggie puts the `.env` in place by file (mode 600, owner jonation): `DISCORD_TOKEN` (the Jo Nation Helper bot's own token, never WU Wizard's), `MONGODB_URI`, `COC_API_TOKEN`, optional `RECRUITMENT_CHANNEL_ID`, `CLOUDINARY_*` optional.
-- [ ] B4. Install `/etc/systemd/system/jo-nation.service` from `deploy/`, `daemon-reload`, `enable --now`.
-- [ ] B5. Add `/etc/sudoers.d/jo-nation` so ruggie can run commands as jonation and start/stop/restart/status jo-nation.service only.
-- [ ] B6. Check `journalctl -u jo-nation.service`, then test `/post-clan` and `/post-edit` in Discord.
-- [ ] B7. Stop `recruit-bot.service` on the old Hetzner box once the new one works, so two copies don't answer every command twice.
+- [x] B1. Create OS user `jonation` (own home, mode 750, no sudo). Check first that it doesn't already exist.
+- [x] B2. As `jonation`: install uv and Python 3.12.3, clone `SirRuggie/recruit_python` to `/home/jonation/recruit_python`, create `venv/`, `pip install -r requirements.txt`.
+- [x] B3. Ruggie puts the `.env` in place by file (mode 600, owner jonation): `DISCORD_TOKEN` (the Jo Nation Helper bot's own token, never WU Wizard's), `MONGODB_URI`, `COC_API_TOKEN`, optional `RECRUITMENT_CHANNEL_ID`, `CLOUDINARY_*` optional.
+- [x] B4. Install `/etc/systemd/system/jo-nation.service` from `deploy/`, `daemon-reload`, `enable --now`.
+- [x] B5. Add `/etc/sudoers.d/jo-nation` so ruggie can run commands as jonation and start/stop/restart/status jo-nation.service only.
+- [x] B6. Check `journalctl -u jo-nation.service`, then test `/post-clan` and `/post-edit` in Discord.
+- [x] B7. Stop `recruit-bot.service` on the old Hetzner box once the new one works, so two copies don't answer every command twice.
+
+### Follow-ups done during setup
+- [x] Removed the Server Members and Message Content intents (Discord returned 4014; the app can't enable them without review, and no code uses them).
+- [x] Info-message image moved from Cloudinary (`_archive/`) to the WU R2 bucket: `https://wu-media.ruggie.zone/jo-nation/recruit_info.jpg`.
+- [x] Old `recruit-bot.service` on Hetzner (user `recruitbot`) disabled and stopped; its files remain there.
 
 ### Things Ruggie must do or confirm
 - Discord Developer Portal, Jo Nation Helper app: copy the token and turn on the **Server Members** and **Message Content** intents.
