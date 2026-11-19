@@ -10,6 +10,7 @@ const state = {
   filter: "all",
   editing: null, // { post (or null for new), form }
   images: null, // R2 library, loaded the first time the picker opens
+  imagesError: "",
   picker: { tab: "library", query: "", file: null, preview: "", uploading: false, error: "" },
 };
 
@@ -694,7 +695,8 @@ function renderPicker() {
   let body;
   if (pk.tab === "library") {
     if (state.images === null) body = `<p class="hint">Loading images…</p>`;
-    else if (pk.error) body = `<p class="form-error">${esc(pk.error)}</p>`;
+    else if (state.imagesError) body = `<p class="form-error">${esc(state.imagesError)}</p>`;
+    else if (!state.images.length) body = `<p class="hint">No images found in R2 under clans/ or jo-nation/.</p>`;
     else {
       const groups = libraryGroups();
       body = groups.length
@@ -737,12 +739,16 @@ async function openPicker() {
   state.picker = { tab: "library", query: "", file: null, preview: "", uploading: false, error: "" };
   renderPicker();
   $("#picker").showModal();
-  if (state.images === null) {
+  // Load the library, and try again on every open while it is empty or failed.
+  if (state.images === null || !state.images.length) {
+    state.images = null;
+    renderPicker();
     try {
       state.images = (await api("GET", "/api/images")).images;
+      state.imagesError = "";
     } catch (err) {
       state.images = [];
-      state.picker.error = err.message;
+      state.imagesError = err.message;
     }
     if ($("#picker").open) renderPicker();
   }
@@ -797,7 +803,7 @@ document.addEventListener("click", (event) => {
   if (target.dataset.pick) return useImage(target.dataset.pick);
   if (target.dataset.tab) {
     state.picker.tab = target.dataset.tab;
-    state.picker.error = state.images !== null && !state.images.length && target.dataset.tab === "library" ? state.picker.error : "";
+    state.picker.error = "";
     return renderPicker();
   }
   if (target.dataset.edit) return openEditor(state.posts.find((p) => p.id === target.dataset.edit));

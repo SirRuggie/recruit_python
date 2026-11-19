@@ -13,6 +13,7 @@ says images are not set up and the rest of the dashboard works as before.
 
 import asyncio
 import hashlib
+import logging
 import os
 import re
 import time
@@ -35,6 +36,7 @@ FORMATS = {
     "GIF": ("gif", "image/gif"),
     "WEBP": ("webp", "image/webp"),
 }
+log = logging.getLogger("dashboard.media")
 IMAGE_EXT = re.compile(r"\.(png|jpe?g|gif|webp)$", re.IGNORECASE)
 ENV = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET", "R2_PUBLIC_BASE_URL")
 
@@ -136,7 +138,9 @@ class MediaStore:
         try:
             images = await asyncio.to_thread(self._list_blocking)
         except Exception as exc:
-            raise MediaError("Couldn't load images from R2.") from exc
+            log.exception("Listing R2 images failed")
+            code = getattr(exc, "response", {}).get("Error", {}).get("Code") if isinstance(getattr(exc, "response", None), dict) else None
+            raise MediaError(f"Couldn't load images from R2{f' ({code})' if code else ''}.") from exc
         self._listing = (time.time() + LIST_SECONDS, images)
         return images
 
