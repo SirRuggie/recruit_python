@@ -73,3 +73,33 @@ journalctl -u jo-nation.service -f
 Rollback: `sudo -n -u jonation git -C /home/jonation/recruit_python reset --hard <old-sha>`, then restart.
 
 Never run `main.py` by hand while the service is up. Two copies on one token answer every command twice. The same applies to the old `recruit-bot.service` on the Hetzner box: stop it once this one works.
+
+## Scheduled posts dashboard
+
+A small web app at https://jonation.ruggie.zone to view, edit, add, pause and delete the bot's scheduled posts (`settings.auto_recruit`). Code is in `dashboard/`. It runs from the same checkout, venv and `.env` as the bot, as its own systemd unit.
+
+| Item | Value |
+|---|---|
+| Service | `jo-nation-dash.service` (copy of `deploy/jo-nation-dash.service`) |
+| Listens on | `127.0.0.1:8790`, behind Caddy (`deploy/Caddyfile.jo-nation-dash`) |
+| Logs | `journalctl -u jo-nation-dash.service -f` |
+| Login | Discord OAuth2 with the Jo Nation Helper app. Only IDs in `DASHBOARD_ALLOWED_IDS` get in. |
+
+Extra `.env` keys:
+
+| Key | What it is |
+|---|---|
+| `DASHBOARD_PUBLIC_URL` | `https://jonation.ruggie.zone` |
+| `DISCORD_CLIENT_ID` | Jo Nation Helper app's Application ID (Developer Portal, General Information) |
+| `DISCORD_CLIENT_SECRET` | Jo Nation Helper app's OAuth2 Client Secret (Developer Portal, OAuth2) |
+| `DASHBOARD_SECRET` | Random string that signs the login cookie: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Changing it signs everyone out. |
+| `DASHBOARD_ALLOWED_IDS` | Comma-separated Discord user IDs allowed to sign in |
+
+In the Developer Portal, OAuth2, add the redirect `https://jonation.ruggie.zone/auth/callback`.
+
+How it works with the bot: the dashboard only reads and writes MongoDB. The bot re-reads `auto_recruit` every minute and reschedules a post when its times or timezone change. A post can have several daily times (`post_times`, with `post_time` kept as the first one for older code). Text edited in the dashboard is stored on the post itself (`description`, `image_url`, `discord_link`) and wins over the user's saved /post-clan template; text left equal to the template is not stored, so later /post-edit changes still apply.
+
+Update after a code change: pull as for the bot, then `sudo systemctl restart jo-nation-dash.service`.
+
+Local run with fake data (no Mongo, Discord or Clash calls): not part of the repo; the dashboard can be started with `DASHBOARD_DEV_LOGIN=1` on 127.0.0.1, which skips Discord and signs in as the first allowed ID.
+
