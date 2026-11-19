@@ -519,6 +519,9 @@ async def security_headers(request, handler):
     )
     if request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
+    elif request.path.startswith("/static/") and not request.path.endswith(".woff2"):
+        # Make browsers and Cloudflare check for a new version, so updates show up at once.
+        response.headers["Cache-Control"] = "no-cache"
     return response
 
 
