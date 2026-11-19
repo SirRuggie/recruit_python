@@ -9,8 +9,8 @@ import logging
 
 loader = lightbulb.Loader()
 
-# Configuration
-RECRUITMENT_CHANNEL_ID = 1144471630614114454
+# Configuration (set in .env, see utils/constants.py)
+from utils.constants import RECRUITMENT_CHANNEL_ID
 
 # Logger for debugging
 logger = logging.getLogger(__name__)

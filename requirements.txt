@@ -1,35 +1,38 @@
+# Versions pinned 2026-11-19 to match the WU bot (SirRuggie/WU_Python), whose
+# requirements.txt explains each pin. Change them on purpose, not by accident.
+
 # Schedules jobs like timers or repeated tasks (e.g. cron jobs)
-APScheduler
+APScheduler==3.11.3
 
 # Main Discord API wrapper for bots
-hikari
+hikari==2.6.0
 
 # Command framework for hikari (handles slash and prefix commands)
-hikari-lightbulb
+hikari-lightbulb==3.2.6
 
 # Loads .env file contents into environment variables
-python-dotenv
+python-dotenv==1.2.4
 
 # MongoDB driver (synchronous)
-pymongo
+pymongo==4.17.0
 
 # Handles timezones and datetime formatting (used by APScheduler)
-pendulum
+pendulum==3.3.0
 
 # Clash of Clans API wrapper (community-maintained)
-coc.py
+coc.py==3.10.0
 
 # Image processing library (resize, convert, etc.)
-Pillow
+Pillow==13.0.0
 
 # HTTP library for sending requests (e.g. API calls)
-requests
+requests==2.34.2
 
 # Async version of requests (works with async code)
-aiohttp
+aiohttp==3.14.5
 
 # Uploads and manages media on Cloudinary
-cloudinary
+cloudinary==1.47.0
 
 # Async Reddit API wrapper (used for bots interacting with Reddit)
-asyncpraw
+asyncpraw==8.0.3

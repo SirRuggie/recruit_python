@@ -37,11 +37,17 @@ See `docs/manual_auto_recruit_example.md` for detailed instructions.
 
 ## Setup
 
+Requires Python 3.12.
+
 1. Create a `.env` file with:
    ```
    DISCORD_TOKEN=your_bot_token
    MONGODB_URI=your_mongodb_uri
+   COC_API_TOKEN=your_official_clash_api_key
+   # Optional, defaults to 1144471630614114454
+   RECRUITMENT_CHANNEL_ID=channel_id
    ```
+   `COC_API_TOKEN` is a key from developer.clashofclans.com. It only works from the IP address it was created for.
 
 2. Install dependencies:
    ```bash
@@ -52,6 +58,8 @@ See `docs/manual_auto_recruit_example.md` for detailed instructions.
    ```bash
    python main.py
    ```
+
+On agent-forge the bot runs as a systemd service. See `docs/deployment.md`.
 
 ## MongoDB Collections
 
