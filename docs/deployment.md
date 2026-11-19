@@ -59,6 +59,8 @@ ruggie ALL=(jonation) NOPASSWD: ALL
 ruggie ALL=(root) NOPASSWD: /usr/bin/systemctl start jo-nation.service, /usr/bin/systemctl stop jo-nation.service, /usr/bin/systemctl restart jo-nation.service, /usr/bin/systemctl status jo-nation.service
 ```
 
+The rule matches the exact command, so add no extra flags: `sudo -n systemctl status jo-nation.service` works, `... --no-pager` asks for a password.
+
 ## Deploy an update
 
 ```bash
