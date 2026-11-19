@@ -411,8 +411,11 @@ async def list_templates(request):
         {"_id": {"$regex": r"^\d+$"}}, {"clan_tag": 1, **{f: 1 for f in CONTENT_FIELDS}}
     ).to_list(500)
     out = []
+    cache = request.app["cache"]
     for row in rows:
-        user = await discord_user(request, row["_id"])
+        # Names only from the cache: looking up hundreds of users would hit Discord's rate limit.
+        hit = cache.get(f"user:{row['_id']}")
+        user = hit[1] if hit and hit[0] > time.time() else None
         out.append({"discord_id": row["_id"], "user": user, "clan_tag": row.get("clan_tag"),
                     "content": {f: row.get(f) or "" for f in CONTENT_FIELDS}})
     out.sort(key=lambda r: ((r["user"] or {}).get("name") or r["discord_id"]).lower())

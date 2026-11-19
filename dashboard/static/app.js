@@ -324,19 +324,24 @@ async function openEditor(post) {
         saved_content: post.has_template ? post.saved_content : null,
       }
     : blankForm();
-  state.editing = { post, form, errors: {}, message: "", saving: false, confirmDelete: false };
-  if (state.templates === null) {
-    try {
-      state.templates = (await api("GET", "/api/templates")).templates;
-    } catch (err) {
-      state.templates = [];
-      toast(err.message, true);
-    }
-  }
+  const editing = { post, form, errors: {}, message: "", saving: false, confirmDelete: false };
+  state.editing = editing;
+  // Open at once; the template list fills in when it arrives.
   renderEditor();
   const dialog = $("#editor");
   if (!dialog.open) dialog.showModal();
   if (post?.clan_tag) checkClan(post.clan_tag);
+  if (state.templates === null) {
+    try {
+      state.templates = (await api("GET", "/api/templates")).templates;
+    } catch (err) {
+      toast(err.message, true);
+      return;
+    }
+    if (state.editing !== editing) return;
+    readForm();
+    renderEditor();
+  }
 }
 
 function closeEditor() {
@@ -351,7 +356,11 @@ const invalid = (name) => (state.editing.errors[name] ? `aria-invalid="true" ari
 
 function renderEditor() {
   const { post, form, message, saving, confirmDelete } = state.editing;
-  const templates = state.templates || [];
+  const templates = [...(state.templates || [])];
+  // Until the list loads (or if this user has no template), keep the current user selectable.
+  if (form.discord_id && form.discord_id !== "__other" && !templates.some((t) => t.discord_id === form.discord_id)) {
+    templates.unshift({ discord_id: form.discord_id, user: post?.user, clan_tag: post?.clan_tag });
+  }
   const known = templates.some((t) => t.discord_id === form.discord_id);
   const choosingOther = form.discord_id === "__other" || (form.discord_id && !known);
   const tzKnown = TIMEZONES.some(([z]) => z === form.timezone);
