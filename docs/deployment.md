@@ -81,7 +81,7 @@ A small web app at https://jonation.ruggie.zone to view, edit, add, pause and de
 | Item | Value |
 |---|---|
 | Service | `jo-nation-dash.service` (copy of `deploy/jo-nation-dash.service`) |
-| Listens on | `127.0.0.1:8790`, behind Caddy (`deploy/Caddyfile.jo-nation-dash`) |
+| Listens on | `127.0.0.1:8790`, published through the Cloudflare Tunnel route `jonation.ruggie.zone` -> `http://localhost:8790` |
 | Logs | `journalctl -u jo-nation-dash.service -f` |
 | Login | Discord OAuth2 with the Jo Nation Helper app. Only IDs in `DASHBOARD_ALLOWED_IDS` get in. |
 
@@ -94,6 +94,10 @@ Extra `.env` keys:
 | `DISCORD_CLIENT_SECRET` | Jo Nation Helper app's OAuth2 Client Secret (Developer Portal, OAuth2) |
 | `DASHBOARD_SECRET` | Random string that signs the login cookie: `python3 -c "import secrets; print(secrets.token_urlsafe(48))"`. Changing it signs everyone out. |
 | `DASHBOARD_ALLOWED_IDS` | Comma-separated Discord user IDs allowed to sign in |
+
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET`, `R2_PUBLIC_BASE_URL` | Jo Nation's own R2 API token (Object Read & Write on the WU media bucket) for the image picker. `R2_PUBLIC_BASE_URL` is `https://wu-media.ruggie.zone`. Without them the picker says images aren't set up. |
+
+Uploads go to `jo-nation/recruit/` in the bucket. The picker's library shows `clans/` (WU clan logos and banners) and `jo-nation/`.
 
 In the Developer Portal, OAuth2, add the redirect `https://jonation.ruggie.zone/auth/callback`.
 
