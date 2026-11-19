@@ -8,6 +8,7 @@ import coc
 from datetime import datetime, timezone, time
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.triggers.combining import OrTrigger
 from utils.mongo import MongoClient
 from utils.constants import CYAN_ACCENT, GREEN_ACCENT
 from utils import bot_data
@@ -38,6 +39,15 @@ logger = logging.getLogger(__name__)
 # Global scheduler instance
 scheduler = None
 
+# Send times and timezone each job was last scheduled with, so the reload only
+# reschedules a post when its schedule actually changed.
+scheduled_with = {}
+
+
+def post_times_of(post_data: dict) -> list:
+    """Send times of a post. The dashboard writes a `post_times` list; older documents only have `post_time`."""
+    return post_data.get("post_times") or [post_data.get("post_time", "14:00")]
+
 
 @loader.listener(hikari.StartedEvent)
 async def on_started(event: hikari.StartedEvent) -> None:
@@ -55,11 +65,11 @@ async def on_started(event: hikari.StartedEvent) -> None:
     # Load existing scheduled posts
     await load_scheduled_posts(bot, mongo, coc_client)
     
-    # Schedule periodic reload of schedules from MongoDB (every 5 minutes)
+    # Reload schedules from MongoDB every minute so dashboard edits apply quickly
     scheduler.add_job(
         func=reload_schedules_from_db,
         trigger='interval',
-        minutes=5,
+        minutes=1,
         args=[bot, mongo, coc_client],
         id='reload_schedules',
         replace_existing=True,
@@ -95,7 +105,7 @@ async def load_scheduled_posts(bot: hikari.GatewayBot, mongo: MongoClient, coc_c
                 coc_client=coc_client,
                 doc_id=str(post_data["_id"]),  # MongoDB document ID
                 discord_id=post_data["discord_id"],  # Discord user ID
-                post_time=post_data["post_time"],
+                post_times=post_times_of(post_data),
                 timezone_str=post_data.get("timezone", "America/New_York")
             )
             
@@ -110,7 +120,7 @@ async def reload_schedules_from_db(bot: hikari.GatewayBot, mongo: MongoClient, c
     global scheduler
     
     try:
-        logger.info("Reloading schedules from MongoDB...")
+        logger.debug("Reloading schedules from MongoDB...")
         
         # Get all current jobs
         current_jobs = {job.id: job for job in scheduler.get_jobs() if job.id.startswith("auto_recruit_")}
@@ -133,47 +143,36 @@ async def reload_schedules_from_db(bot: hikari.GatewayBot, mongo: MongoClient, c
                 continue
             
             if post_data.get("enabled", False):
-                # Should be scheduled
-                if job_id in current_jobs:
-                    # Always reschedule to ensure any changes are picked up
-                    post_time = post_data.get("post_time", "14:00")
-                    timezone_str = post_data.get("timezone", "America/New_York")
-                    
-                    logger.info(f"Updating schedule for document {doc_id} (Discord user {discord_id})")
-                    schedule_recruitment_post(
-                        bot=bot,
-                        mongo=mongo,
-                        coc_client=coc_client,
-                        doc_id=doc_id,
-                        discord_id=discord_id,
-                        post_time=post_time,
-                        timezone_str=timezone_str
-                    )
-                else:
-                    # New job - schedule it
-                    logger.info(f"Scheduling new job for document {doc_id} (Discord user {discord_id})")
-                    schedule_recruitment_post(
-                        bot=bot,
-                        mongo=mongo,
-                        coc_client=coc_client,
-                        doc_id=doc_id,
-                        discord_id=discord_id,
-                        post_time=post_data.get("post_time", "14:00"),
-                        timezone_str=post_data.get("timezone", "America/New_York")
-                    )
+                # Should be scheduled. Only (re)schedule when it is new or its times changed.
+                post_times = post_times_of(post_data)
+                timezone_str = post_data.get("timezone", "America/New_York")
+                if job_id in current_jobs and scheduled_with.get(job_id) == (tuple(post_times), timezone_str):
+                    continue
+                logger.info(f"Scheduling document {doc_id} (Discord user {discord_id}) at {post_times} {timezone_str}")
+                schedule_recruitment_post(
+                    bot=bot,
+                    mongo=mongo,
+                    coc_client=coc_client,
+                    doc_id=doc_id,
+                    discord_id=discord_id,
+                    post_times=post_times,
+                    timezone_str=timezone_str
+                )
             else:
                 # Should not be scheduled
                 if job_id in current_jobs:
                     logger.info(f"Removing disabled job for document {doc_id}")
                     scheduler.remove_job(job_id)
+                    scheduled_with.pop(job_id, None)
         
         # Remove jobs that no longer exist in database
         for job_id in current_jobs:
             if job_id not in seen_jobs and job_id != 'reload_schedules':
                 logger.info(f"Removing orphaned job {job_id}")
                 scheduler.remove_job(job_id)
+                scheduled_with.pop(job_id, None)
                 
-        logger.info("Schedule reload complete")
+        logger.debug("Schedule reload complete")
         
     except Exception as e:
         logger.error(f"Error reloading schedules: {e}")
@@ -185,18 +184,21 @@ def schedule_recruitment_post(
     coc_client: coc.Client,
     doc_id: str,
     discord_id: str,
-    post_time: str,
+    post_times: list,
     timezone_str: str = "America/New_York"
 ) -> None:
-    """Schedule a recruitment post for a specific user"""
+    """Schedule a recruitment post for a specific user, daily at each time in post_times ("HH:MM")"""
     global scheduler
     
     try:
-        # Parse time (format: "HH:MM")
-        hour, minute = map(int, post_time.split(":"))
-        
         # Get timezone
         tz = pendulum.timezone(timezone_str)
+        
+        # One daily trigger per send time, combined so the post stays one job
+        triggers = []
+        for post_time in post_times:
+            hour, minute = map(int, post_time.split(":"))
+            triggers.append(CronTrigger(hour=hour, minute=minute, timezone=tz))
         
         # Create job ID using document ID
         job_id = f"auto_recruit_{doc_id}"
@@ -208,14 +210,15 @@ def schedule_recruitment_post(
         # Schedule the job - pass both doc_id and discord_id
         scheduler.add_job(
             func=post_recruitment,
-            trigger=CronTrigger(hour=hour, minute=minute, timezone=tz),
+            trigger=triggers[0] if len(triggers) == 1 else OrTrigger(triggers),
             args=[bot, mongo, coc_client, doc_id, discord_id],
             id=job_id,
             replace_existing=True,
             misfire_grace_time=3600  # Allow up to 1 hour late
         )
         
-        logger.info(f"Scheduled recruitment post for Discord user {discord_id} (doc {doc_id}) at {post_time} {timezone_str}")
+        scheduled_with[job_id] = (tuple(post_times), timezone_str)
+        logger.info(f"Scheduled recruitment post for Discord user {discord_id} (doc {doc_id}) at {post_times} {timezone_str}")
         
     except Exception as e:
         logger.error(f"Error scheduling post for Discord user {discord_id}: {e}")
@@ -289,9 +292,10 @@ async def post_recruitment(
         # Create the message components
         components = await create_recruitment_components(
             clan=clan,
-            recruitment_message=recruit_data.get("description", "Join our clan!"),
-            image_url=recruit_data.get("image_url"),
-            discord_link=recruit_data.get("discord_link"),
+            # Text set for this post in the dashboard wins over the user's saved template
+            recruitment_message=auto_data.get("description") or recruit_data.get("description", "Join our clan!"),
+            image_url=auto_data.get("image_url", recruit_data.get("image_url")) or None,
+            discord_link=auto_data.get("discord_link", recruit_data.get("discord_link")) or None,
             posted_by_id=int(discord_id)
         )
         

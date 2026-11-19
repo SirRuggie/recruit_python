@@ -1,6 +1,49 @@
 # Recruit-Python Bot - Todo List
 
-## Current Plan: Host Jo Nation bot on agent-forge and fix bugs
+## Current Plan: Scheduled posts dashboard
+**Date**: 2026-11-19
+**Status**: Code done and tested with sample data 2026-11-19. Step 8 (go live) needs Ruggie.
+
+Goal: a small web dashboard where Ruggie can see every scheduled recruitment post the bot sends (MongoDB `settings.auto_recruit`), edit the time, timezone and on/off state, edit what gets posted, and add new ones. Not a long scrolling list. Look and feel taken from dash.warriorsunited.cc (WU's dark theme, gold accent, Inter, 44px controls, mobile-first).
+
+### How it fits with the bot (no change to how posts are sent)
+- The bot already re-reads `auto_recruit` from MongoDB every 5 minutes and reschedules every enabled post. The dashboard only reads and writes MongoDB. The bot and the dashboard never talk to each other directly.
+- One small bot change: poll every 1 minute instead of 5, so a saved edit takes effect within a minute.
+
+### Ruggie's answers (2026-11-19)
+- Hostname: `jonation.ruggie.zone`.
+- Only Ruggie logs in.
+- Each post sends daily at one or more set times (e.g. twice a day, 12 hours apart).
+- Content comes from the saved /post-clan template (stored data). Editing it there is fine.
+- Only the 4-5 posts Ruggie schedules show up. Those are exactly the documents in `auto_recruit`; manual /post-clan posts never go there, so nothing else appears.
+
+### Layout (one screen, no long list)
+- **Header**: "Next send" countdown (clan, time) and counts: active / paused / errors.
+- **24-hour timeline strip**: every send time is a marker on a 0-24h bar in Eastern time. Tap a marker to edit that post.
+- **Card grid**: one card per scheduled post (4-5 fit on one screen). Clan badge and name, its send times, posted-as user, last sent, status chip (Active / Paused / Error).
+- **Editor drawer** (side panel on desktop, full screen sheet on phone): send times (add/remove, one or more per day), timezone, on/off, clan tag, channel, and the stored post content (description, image URL, Discord link) with a preview. Save, Pause, Delete (with confirm).
+- **Add new**: same drawer, empty. Pick who it posts as from saved /post-clan templates.
+
+### Build steps
+- [x] 1. `dashboard/server.py`: aiohttp app. Routes: login, logout, list posts, create, update, delete. Reads/writes `auto_recruit` and `recruit_data`. Clan names and badges from the Clash API (`COC_API_TOKEN`, cached). User names from Discord with the bot token (cached).
+- [x] 2. Login: "Sign in with Discord" (OAuth2, `identify` scope) with the Jo Nation Helper app. Only IDs in `DASHBOARD_ALLOWED_IDS` get in (just Ruggie). Signed session cookie (HttpOnly, Secure, SameSite=Lax) plus a CSRF header on writes.
+- [x] 3. Server-side checks: times HH:MM, real IANA timezone, clan tag exists, IDs are digits. Save fails with "changed elsewhere, reload" if the document changed since it was opened.
+- [x] 4. `dashboard/static/`: `index.html`, `app.css`, `app.js`. Plain HTML/CSS/JS, no build step. WU tokens, Lucide icons as inline SVG.
+- [x] 5. Bot (`extensions/scheduler/auto_recruit.py`): support a `post_times` list next to the old `post_time` field (one job, fires at each time; old docs keep working), and reload every 1 minute instead of 5.
+- [x] 6. Test locally with a throwaway MongoDB and fixture data: list, add, edit, pause, delete, bad inputs, logged-out access. Screenshots at 360x800 and 1440x1000.
+- [x] 7. Deploy files: `deploy/jo-nation-dash.service` (as `jonation`, `127.0.0.1:8790`), Caddy site block, `docs/deployment.md` section.
+- [ ] 8. Go live (Ruggie runs the sudo steps one at a time): `.env` keys, unit, Caddy block, DNS record for `jonation.ruggie.zone`, OAuth redirect URL in the Discord Developer Portal.
+
+### Review (code)
+- **Dashboard** (`dashboard/`): `server.py` is the aiohttp app (login, posts API, input checks, Clash and Discord name lookups with a cache). `static/` holds one HTML page, one CSS file (WU tokens, Inter font copied from WU) and one JS file. No build step, no new Python packages.
+- **Layout**: next-send countdown and counts at the top, a 24-hour timeline with one marker per send time (stacked when close, paused dimmed, errors red, next one gold), then one card per post with times, posts-as user, channel, last sent, error text, and Edit / Pause buttons. Editor is a side panel (full screen on phone) with on/off, send times (Add time, "Twice a day (+12h)"), timezone, posts-as, clan tag (checked live against the Clash API), channel, description/image/link, and a Discord-style preview.
+- **Content rule**: editing text in the dashboard stores it on that post only. The user's saved /post-clan template is not changed. Text equal to the template is not stored, so the template still applies. "Use saved template" resets it. A new post for a user without a template creates one, because the bot disables posts whose user has none.
+- **Bot** (`extensions/scheduler/auto_recruit.py`): reads `post_times` (falls back to `post_time`), one job per post using an OR of daily cron triggers, reload every 1 minute, and only reschedules a post when its times or timezone changed (before, every reload removed and re-added every job). Reload log lines moved to debug so the journal isn't flooded every minute. Post text uses the post's own text first, then the template.
+- **Security**: Discord OAuth `identify` only; allowlist checked on every request; HMAC-signed HttpOnly cookie; CSRF header on every write; CSP that only allows the page's own scripts; dev login refuses to start unless bound to 127.0.0.1.
+- **Tested** (Python 3.12.3, in-memory Mongo via mongomock, fake Clash/Discord lookups): 17 API checks pass (logged out 401, missing CSRF 403, forged cookie 401, every bad field rejected, unknown clan tag rejected, create normalises tag and times and uses the default channel, custom text stays on the post, stale edit 409, reset clears override, pause, resume clears error, template list skips the info-message doc, delete, edit after delete 404, logout). Scheduler: first reload schedules 2 enabled posts (one with two times), second reload reschedules nothing, editing times reschedules only that post, disabled and deleted posts are removed. Browser (Playwright, 1440x1000 and 360x800): no page errors; add a post through the UI, it appears, delete it, it's gone; field errors clear when the field changes.
+- **Not tested**: live Discord login, live Clash API and real MongoDB. Those get checked on agent-forge in step 8.
+
+## Done: Host Jo Nation bot on agent-forge and fix bugs
 **Date**: 2026-11-19
 **Status**: Done 2026-11-19. Bot is live on agent-forge.
 

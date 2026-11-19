@@ -1,0 +1,5 @@
+# Add this block to agent-forge's Caddyfile, then reload Caddy.
+jonation.ruggie.zone {
+	encode gzip
+	reverse_proxy 127.0.0.1:8790
+}

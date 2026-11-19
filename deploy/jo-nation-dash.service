@@ -1,0 +1,29 @@
+# Jo Nation scheduled posts dashboard - systemd unit for agent-forge.
+# Runs from the same checkout, venv and .env as the bot (jo-nation.service).
+# Install with:
+#   sudo install -m 644 deploy/jo-nation-dash.service /etc/systemd/system/jo-nation-dash.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now jo-nation-dash.service
+
+[Unit]
+Description=Jo Nation scheduled posts dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jonation
+Group=jonation
+WorkingDirectory=/home/jonation/recruit_python
+Environment=PATH=/home/jonation/recruit_python/venv/bin:/usr/bin:/bin
+Environment=PYTHONUNBUFFERED=1
+Environment=DASHBOARD_HOST=127.0.0.1
+Environment=DASHBOARD_PORT=8790
+ExecStart=/home/jonation/recruit_python/venv/bin/python -m dashboard
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
